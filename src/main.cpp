@@ -1,7 +1,7 @@
 #include "engine.h"
 
 int main() {
-    engine e;
+    vpt::engine e;
     e.start();
     return 0;
 }
