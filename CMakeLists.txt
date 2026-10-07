@@ -1,12 +1,21 @@
 cmake_minimum_required(VERSION 3.15)
-project(Vulkan_Pathtracer LANGUAGES CXX)
+project(Vulkan_Pathtracer)
 
 set(CMAKE_CXX_STANDARD 23)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
 
-add_executable(Vulkan_Pathtracer 
+add_subdirectory(external)
+
+find_package(Vulkan 1.4 REQUIRED)
+
+add_executable(Vulkan_Pathtracer
     src/main.cpp
     src/engine.cpp
     src/engine.h
+    src/util.h
 )
+
+target_link_libraries(Vulkan_Pathtracer PRIVATE
+    Vulkan::Vulkan glfw glm
+)
+
+target_include_directories(Vulkan_Pathtracer PRIVATE src)
