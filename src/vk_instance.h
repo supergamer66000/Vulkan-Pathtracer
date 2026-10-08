@@ -1,0 +1,7 @@
+#ifndef VULKAN_PATHTRACER_VK_INSTANCE_H
+#define VULKAN_PATHTRACER_VK_INSTANCE_H
+
+#include <vulkan/vulkan_raii.hpp>
+
+
+#endif //VULKAN_PATHTRACER_VK_INSTANCE_H

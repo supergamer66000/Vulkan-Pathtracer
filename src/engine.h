@@ -1,6 +1,7 @@
 #ifndef VULKAN_PATHTRACER_ENGINE_H
 #define VULKAN_PATHTRACER_ENGINE_H
 
+#include "vulkan/vulkan.hpp"
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
@@ -46,13 +47,14 @@ namespace vpt {
         };
         static const bool use_validation_layers = true;
 
-        vk::raii::DebugUtilsMessengerEXT vk_debug = nullptr;
+        void init_vulkan_instance();
+        void init_vulkan_devices();
 
-        void init_vulkan();
         vk::raii::Context vk_context;
-        vk::raii::Instance vk_instance = nullptr;
-        vk::raii::PhysicalDevice vk_physical_device = nullptr;
-        vk::raii::Device vk_device = nullptr;
+        vk::raii::Instance vk_instance                               = nullptr;
+        vk::raii::DebugUtilsMessengerEXT vk_debug                    = nullptr;
+        std::unique_ptr<vk::raii::PhysicalDevice> vk_physical_device = nullptr;
+        std::unique_ptr<vk::raii::Device> vk_device                  = nullptr;
     };
 };
 

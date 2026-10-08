@@ -5,7 +5,6 @@
 
 #include <iostream>
 #include <chrono>
-#include <memory>
 #include <stdexcept>
 #include <vector>
 
@@ -18,7 +17,8 @@ namespace vpt {
             throw std::runtime_error("Error initializing glfw");
        
         this->init_glfw();
-        this->init_vulkan();
+        this->init_vulkan_instance();
+        this->init_vulkan_devices();
     }
 
     void engine::init_glfw() {
@@ -32,7 +32,7 @@ namespace vpt {
         glfwMakeContextCurrent(window);
     }
 
-    void engine::init_vulkan() {
+    void engine::init_vulkan_instance() {
         /*
          *  Create the app info the the vulkan renderer.
          */
@@ -88,9 +88,22 @@ namespace vpt {
         // Get the available vulkan extensions
         const auto extensions = vk_context.enumerateInstanceExtensionProperties();
         for (const auto& extension : extensions) {
-            std::cout << "\t- " << extension.extensionName << '\n';
+            std::cout << "   " << extension.extensionName << '\n';
         }
 
+    }
+
+    void engine::init_vulkan_devices() {
+        // Select a GPU
+        const auto physicals_devices = vk_instance.enumeratePhysicalDevices();
+        const auto selected_device = physicals_devices[2];
+        for (const auto& gpu : physicals_devices) {
+            const auto props = gpu.getProperties2().properties;
+            std::cout << "GPU ID: " << props.deviceID << ", Name: " << props.deviceName << std::endl;
+        }
+        const auto physical_device_properties = selected_device.getProperties2();
+        std::cout << std::endl;
+        std::cout << "Selected GPU: " << physical_device_properties.properties.deviceName << std::endl;
     }
 
     void engine::start() {
