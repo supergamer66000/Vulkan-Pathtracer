@@ -1,10 +1,13 @@
 #include "engine.h"
 #include "GLFW/glfw3.h"
 #include "vk_util.h"
+#include "vk_validation_logger.h"
 #include "vulkan/vulkan.hpp"
 
 #include <iostream>
+#include <algorithm>
 #include <chrono>
+#include <memory>
 #include <stdexcept>
 #include <vector>
 
@@ -18,7 +21,8 @@ namespace vpt {
        
         this->init_glfw();
         this->init_vulkan_instance();
-        this->init_vulkan_devices();
+        this->init_vulkan_physical_devices();
+        this->init_vulkan_device();
     }
 
     void engine::init_glfw() {
@@ -90,20 +94,78 @@ namespace vpt {
         for (const auto& extension : extensions) {
             std::cout << "   " << extension.extensionName << '\n';
         }
-
     }
 
-    void engine::init_vulkan_devices() {
+    void engine::init_vulkan_physical_devices() {
         // Select a GPU
         const auto physicals_devices = vk_instance.enumeratePhysicalDevices();
-        const auto selected_device = physicals_devices[2];
+        vk_physical_device = std::make_unique<vk::raii::PhysicalDevice>(physicals_devices.front());
+
         for (const auto& gpu : physicals_devices) {
             const auto props = gpu.getProperties2().properties;
             std::cout << "GPU ID: " << props.deviceID << ", Name: " << props.deviceName << std::endl;
         }
-        const auto physical_device_properties = selected_device.getProperties2();
+        const auto physical_device_properties = vk_physical_device->getProperties2();
         std::cout << std::endl;
         std::cout << "Selected GPU: " << physical_device_properties.properties.deviceName << std::endl;
+    }
+
+    void engine::init_vulkan_device() {
+        const auto graphics_family_queue_properties = vk_physical_device->getQueueFamilyProperties2();
+        const auto graphics_queue_family_property = std::ranges::find_if(graphics_family_queue_properties,
+            [](auto const &qfp) { // Right now only queue the graphics index
+                        return (qfp.queueFamilyProperties.queueFlags & vk::QueueFlagBits::eGraphics) != static_cast<vk::QueueFlags>(0); 
+        });
+        const uint32_t graphics_index = std::distance(graphics_family_queue_properties.begin(), graphics_queue_family_property);
+
+        // Create the device Queue
+        constexpr float queue_priority = 0.5f;
+        vk::DeviceQueueCreateInfo device_queue_create_info;
+        device_queue_create_info.queueCount = 1;
+        device_queue_create_info.queueFamilyIndex = graphics_index;
+        device_queue_create_info.pQueuePriorities = &queue_priority;
+
+        // Device Features
+        const auto available_physical_device_features = vk_physical_device->getFeatures2();
+        const auto physical_physical_device_properities = vk_physical_device->enumerateDeviceExtensionProperties();
+        const auto unsupported_physical_device_properities = vk_util::find_unsupported(required_device_extensions, physical_physical_device_properities, 
+            [] (const auto& property) {
+                return property.extensionName;
+            });
+        if (unsupported_physical_device_properities != required_device_extensions.end())
+            throw std::runtime_error("Required layers not supported: " + std::string(*unsupported_physical_device_properities));
+
+        // Enable device features
+        vk::StructureChain<
+            vk::PhysicalDeviceFeatures2,
+            vk::PhysicalDeviceVulkan12Features,
+            vk::PhysicalDeviceVulkan13Features
+            // vk::PhysicalDeviceVulkan14Features
+        > device_features{};
+        device_features.get<vk::PhysicalDeviceVulkan12Features>().bufferDeviceAddress = true;
+        device_features.get<vk::PhysicalDeviceVulkan12Features>().descriptorIndexing = true;
+        device_features.get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering = true;
+        device_features.get<vk::PhysicalDeviceVulkan13Features>().synchronization2 = true;
+
+        vk::DeviceCreateInfo device_info;
+        device_info.setPNext(&device_features)
+            .setQueueCreateInfos(device_queue_create_info)
+            .setPpEnabledExtensionNames(required_device_extensions.data());
+
+        vk_device = std::make_unique<vk::raii::Device>(*vk_physical_device, device_info);
+        vk_graphics_queue = std::make_unique<vk::raii::Queue>(vk_device.get()->getQueue(graphics_index, 0));
+
+        vk::CommandPoolCreateInfo command_pool_info;
+        command_pool_info.setFlags(vk::CommandPoolCreateFlagBits::eResetCommandBuffer) // ???
+            .setQueueFamilyIndex(graphics_index);
+
+        vk_command_pool = std::make_unique<vk::raii::CommandPool>(vk_device->createCommandPool(command_pool_info));
+
+        vk::CommandBufferAllocateInfo command_buffer_alloc_info; // Create command buffers for the device
+        command_buffer_alloc_info.setCommandPool(**vk_command_pool);
+        command_buffer_alloc_info.setCommandBufferCount(1); // Create a single buffer for now
+        
+        vk_command_buffers = std::make_unique<vk::raii::CommandBuffers>(*vk_device, command_buffer_alloc_info);
     }
 
     void engine::start() {
@@ -118,7 +180,7 @@ namespace vpt {
     }
 
     engine::~engine() {
-        glfwDestroyWindow(window);
+      
         glfwTerminate();
     }
 };

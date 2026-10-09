@@ -26,13 +26,13 @@ namespace vpt::vk_util {
             });
     }
 
-    static VKAPI_ATTR vk::Bool32 VKAPI_CALL debug_callback(
-            vk::DebugUtilsMessageSeverityFlagBitsEXT severity,
-            vk::DebugUtilsMessageTypeFlagsEXT,
-            const vk::DebugUtilsMessengerCallbackDataEXT* data, void*) {
-        std::cerr << "[vk] " << data->pMessage << '\n';
-        return vk::False;
-    }
+    // static VKAPI_ATTR vk::Bool32 VKAPI_CALL debug_callback(
+    //         vk::DebugUtilsMessageSeverityFlagBitsEXT severity,
+    //         vk::DebugUtilsMessageTypeFlagsEXT,
+    //         const vk::DebugUtilsMessengerCallbackDataEXT* data, void*) {
+    //     std::cerr << "[vk] " << data->pMessage << '\n';
+    //     return vk::False;
+    // }
 
     inline std::vector<const char*> get_required_instance_extension_by_glfw() {
         uint32_t glfw_extension_count = 0;

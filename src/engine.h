@@ -43,18 +43,26 @@ namespace vpt {
         bool running = true;
 
         const std::vector<const char*> enabled_validation_layers = {
-           "VK_LAYER_KHRONOS_validation" 
+           "VK_LAYER_KHRONOS_validation",
         };
         static const bool use_validation_layers = true;
 
+        const std::vector<const char*> required_device_extensions = {
+            vk::KHRSwapchainExtensionName
+        };
+
         void init_vulkan_instance();
-        void init_vulkan_devices();
+        void init_vulkan_physical_devices();
+        void init_vulkan_device();
 
         vk::raii::Context vk_context;
         vk::raii::Instance vk_instance                               = nullptr;
         vk::raii::DebugUtilsMessengerEXT vk_debug                    = nullptr;
         std::unique_ptr<vk::raii::PhysicalDevice> vk_physical_device = nullptr;
+        std::unique_ptr<vk::raii::Queue> vk_graphics_queue           = nullptr;
         std::unique_ptr<vk::raii::Device> vk_device                  = nullptr;
+        std::unique_ptr<vk::raii::CommandPool> vk_command_pool       = nullptr;
+        std::unique_ptr<vk::raii::CommandBuffers> vk_command_buffers = nullptr;
     };
 };
 
