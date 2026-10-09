@@ -1,7 +1,10 @@
 #ifndef VULKAN_PATHTRACER_ENGINE_H
 #define VULKAN_PATHTRACER_ENGINE_H
 
+#include "vk_swapchain.h"
 #include "vulkan/vulkan.hpp"
+#include <cstdint>
+#include <memory>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
@@ -65,16 +68,18 @@ namespace vpt {
             }
             return vk::raii::SurfaceKHR(instance, surface);
         }
+        void init_vulkan_swapchain();
 
         vk::raii::Context vk_context;
-        vk::raii::Instance vk_instance                               = nullptr;
+        std::unique_ptr<vk::raii::Instance> vk_instance              = nullptr;
         vk::raii::DebugUtilsMessengerEXT vk_debug                    = nullptr;
         vulkan::DeviceContext vk_device_ctx{};
-        std::unique_ptr<vk::raii::Queue> vk_graphics_queue           = nullptr;
+        uint32_t vk_graphics_queue_family_index                      = UINT32_MAX;
         std::unique_ptr<vk::raii::CommandPool> vk_command_pool       = nullptr;
         std::unique_ptr<vk::raii::CommandBuffers> vk_command_buffers = nullptr;
 
-        vk::raii::SurfaceKHR vk_surface = nullptr;
+        vk::raii::SurfaceKHR vk_surface                              = nullptr;
+        std::unique_ptr<vulkan::swapchain> vk_swapchain              = nullptr;
     };
 };
 

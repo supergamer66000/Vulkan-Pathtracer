@@ -1,9 +1,12 @@
 #include "engine.h"
 #include "GLFW/glfw3.h"
+#include "vk_swapchain.h"
 #include "vk_util.h"
 #include "vk_validation_logger.h"
 #include "vulkan/vulkan.hpp"
 
+#include <glm/glm.hpp>
+#include <cstdint>
 #include <iostream>
 #include <algorithm>
 #include <chrono>
@@ -21,13 +24,14 @@ namespace vpt {
        
         this->init_glfw();
         this->init_vulkan_instance();
-        this->init_vulkan_physical_devices();
-        this->init_vulkan_device();
 
         // Create the surface
-        auto maybe_surface = this->create_surface(window, vk_instance);
+        auto maybe_surface = this->create_surface(window, *vk_instance);
         if (!maybe_surface) throw std::runtime_error("Error creating the glfw surface for renderering.");
         vk_surface = std::move(maybe_surface.value());
+
+        this->init_vulkan_physical_devices();
+        this->init_vulkan_device();
     }
 
     void engine::init_glfw() {
@@ -81,7 +85,7 @@ namespace vpt {
             .setPEnabledLayerNames(required_layers)
             .setPEnabledExtensionNames(required_instance_extensions);
 
-        vk_instance = vk_context.createInstance(instance_info);
+        vk_instance = std::make_unique<vk::raii::Instance>(vk_context.createInstance(instance_info));
  
         // Add validation layer. Connect it to the callback in vk_util.h
         vk::DebugUtilsMessengerCreateInfoEXT dbg{};
@@ -91,7 +95,7 @@ namespace vpt {
                         | vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation
                         | vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance;
         dbg.pfnUserCallback = &vk_util::debug_callback;
-        vk_debug = vk_instance.createDebugUtilsMessengerEXT(dbg);
+        vk_debug = vk_instance->createDebugUtilsMessengerEXT(dbg);
 
         std::cout << "   "<< "---- Available Extensions ----" << std::endl;
         // Get the available vulkan extensions
@@ -103,7 +107,7 @@ namespace vpt {
 
     void engine::init_vulkan_physical_devices() {
         // Select a GPU
-        const auto physicals_devices = vk_instance.enumeratePhysicalDevices();
+        const auto physicals_devices = vk_instance->enumeratePhysicalDevices();
         vk_device_ctx.physical_device = std::make_unique<vk::raii::PhysicalDevice>(physicals_devices.front());
 
         for (const auto& gpu : physicals_devices) {
@@ -118,17 +122,23 @@ namespace vpt {
 
     void engine::init_vulkan_device() {
         const auto graphics_family_queue_properties = vk_device_ctx.physical_device->getQueueFamilyProperties2();
-        const auto graphics_queue_family_property = std::ranges::find_if(graphics_family_queue_properties,
-            [](auto const &qfp) { // Right now only queue the graphics index
-                        return (qfp.queueFamilyProperties.queueFlags & vk::QueueFlagBits::eGraphics) != static_cast<vk::QueueFlags>(0);
-        });
-        const uint32_t graphics_index = std::distance(graphics_family_queue_properties.begin(), graphics_queue_family_property);
+        std::optional<uint32_t> found_family;
+        for (uint32_t i = 0; i < graphics_family_queue_properties.size(); ++i) {
+            const bool graphics = static_cast<bool>(
+                graphics_family_queue_properties[i].queueFamilyProperties.queueFlags & vk::QueueFlagBits::eGraphics);
+            if (graphics && vk_device_ctx.physical_device->getSurfaceSupportKHR(i, *vk_surface)) {
+                found_family = i;
+                break;
+            }
+        }
+        if (!found_family) throw std::runtime_error("Failed to find graphics family for device");
+        vk_graphics_queue_family_index = *found_family;
 
         // Create the device Queue
         constexpr float queue_priority = 0.5f;
         vk::DeviceQueueCreateInfo device_queue_create_info;
         device_queue_create_info.queueCount = 1;
-        device_queue_create_info.queueFamilyIndex = graphics_index;
+        device_queue_create_info.queueFamilyIndex = vk_graphics_queue_family_index;
         device_queue_create_info.pQueuePriorities = &queue_priority;
 
         // Device Features
@@ -159,11 +169,11 @@ namespace vpt {
             .setPpEnabledExtensionNames(required_device_extensions.data());
 
         vk_device_ctx.device = std::make_unique<vk::raii::Device>(*vk_device_ctx.physical_device, device_info);
-        vk_graphics_queue = std::make_unique<vk::raii::Queue>(vk_device_ctx.device.get()->getQueue(graphics_index, 0));
+        // vk_graphics_queue = std::make_unique<vk::raii::Queue>(vk_device_ctx.device.get()->getQueue(graphics_index, 0));
 
         vk::CommandPoolCreateInfo command_pool_info;
         command_pool_info.setFlags(vk::CommandPoolCreateFlagBits::eResetCommandBuffer) // ???
-            .setQueueFamilyIndex(graphics_index);
+            .setQueueFamilyIndex(vk_graphics_queue_family_index);
 
         vk_command_pool = std::make_unique<vk::raii::CommandPool>(vk_device_ctx.device->createCommandPool(command_pool_info));
 
@@ -172,6 +182,17 @@ namespace vpt {
         command_buffer_alloc_info.setCommandBufferCount(1); // Create a single buffer for now
         
         vk_command_buffers = std::make_unique<vk::raii::CommandBuffers>(*vk_device_ctx.device, command_buffer_alloc_info);
+    }
+
+    void engine::init_vulkan_swapchain() {
+        glm::ivec2 frame_buffer_size;
+        glfwGetFramebufferSize(window, &frame_buffer_size.x, &frame_buffer_size.x);
+
+        vk_swapchain = std::make_unique<vulkan::swapchain>(
+            vk_device_ctx, vk_surface,
+            vk::Extent2D{static_cast<uint32_t>(frame_buffer_size.x), static_cast<uint32_t>(frame_buffer_size.y)},
+            vk_graphics_queue_family_index
+        );
     }
 
     void engine::start() {
