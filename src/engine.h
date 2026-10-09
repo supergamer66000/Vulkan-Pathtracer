@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <vulkan/vulkan_raii.hpp>
 
+#include "context.h"
+
 namespace vpt {
     class engine {
     public:
@@ -55,14 +57,24 @@ namespace vpt {
         void init_vulkan_physical_devices();
         void init_vulkan_device();
 
+        /* Quick way to create the glfw sruface */
+        static std::optional<vk::raii::SurfaceKHR> create_surface(const GLFWwindow* window, const vk::raii::Instance &instance) {
+            VkSurfaceKHR surface;
+            if (glfwCreateWindowSurface(static_cast<VkInstance>(*instance), const_cast<GLFWwindow*>(window), nullptr, &surface) != VK_SUCCESS) {
+                return std::nullopt;
+            }
+            return vk::raii::SurfaceKHR(instance, surface);
+        }
+
         vk::raii::Context vk_context;
         vk::raii::Instance vk_instance                               = nullptr;
         vk::raii::DebugUtilsMessengerEXT vk_debug                    = nullptr;
-        std::unique_ptr<vk::raii::PhysicalDevice> vk_physical_device = nullptr;
+        vulkan::DeviceContext vk_device_ctx{};
         std::unique_ptr<vk::raii::Queue> vk_graphics_queue           = nullptr;
-        std::unique_ptr<vk::raii::Device> vk_device                  = nullptr;
         std::unique_ptr<vk::raii::CommandPool> vk_command_pool       = nullptr;
         std::unique_ptr<vk::raii::CommandBuffers> vk_command_buffers = nullptr;
+
+        vk::raii::SurfaceKHR vk_surface = nullptr;
     };
 };
 

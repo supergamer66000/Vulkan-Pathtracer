@@ -23,6 +23,11 @@ namespace vpt {
         this->init_vulkan_instance();
         this->init_vulkan_physical_devices();
         this->init_vulkan_device();
+
+        // Create the surface
+        auto maybe_surface = this->create_surface(window, vk_instance);
+        if (!maybe_surface) throw std::runtime_error("Error creating the glfw surface for renderering.");
+        vk_surface = std::move(maybe_surface.value());
     }
 
     void engine::init_glfw() {
@@ -99,22 +104,23 @@ namespace vpt {
     void engine::init_vulkan_physical_devices() {
         // Select a GPU
         const auto physicals_devices = vk_instance.enumeratePhysicalDevices();
-        vk_physical_device = std::make_unique<vk::raii::PhysicalDevice>(physicals_devices.front());
+        vk_device_ctx.physical_device = std::make_unique<vk::raii::PhysicalDevice>(physicals_devices.front());
 
         for (const auto& gpu : physicals_devices) {
             const auto props = gpu.getProperties2().properties;
             std::cout << "GPU ID: " << props.deviceID << ", Name: " << props.deviceName << std::endl;
         }
-        const auto physical_device_properties = vk_physical_device->getProperties2();
+        const auto physical_device_properties = vk_device_ctx.physical_device->getProperties2();
+    
         std::cout << std::endl;
         std::cout << "Selected GPU: " << physical_device_properties.properties.deviceName << std::endl;
     }
 
     void engine::init_vulkan_device() {
-        const auto graphics_family_queue_properties = vk_physical_device->getQueueFamilyProperties2();
+        const auto graphics_family_queue_properties = vk_device_ctx.physical_device->getQueueFamilyProperties2();
         const auto graphics_queue_family_property = std::ranges::find_if(graphics_family_queue_properties,
             [](auto const &qfp) { // Right now only queue the graphics index
-                        return (qfp.queueFamilyProperties.queueFlags & vk::QueueFlagBits::eGraphics) != static_cast<vk::QueueFlags>(0); 
+                        return (qfp.queueFamilyProperties.queueFlags & vk::QueueFlagBits::eGraphics) != static_cast<vk::QueueFlags>(0);
         });
         const uint32_t graphics_index = std::distance(graphics_family_queue_properties.begin(), graphics_queue_family_property);
 
@@ -126,8 +132,8 @@ namespace vpt {
         device_queue_create_info.pQueuePriorities = &queue_priority;
 
         // Device Features
-        const auto available_physical_device_features = vk_physical_device->getFeatures2();
-        const auto physical_physical_device_properities = vk_physical_device->enumerateDeviceExtensionProperties();
+        const auto available_physical_device_features = vk_device_ctx.physical_device->getFeatures2();
+        const auto physical_physical_device_properities = vk_device_ctx.physical_device->enumerateDeviceExtensionProperties();
         const auto unsupported_physical_device_properities = vk_util::find_unsupported(required_device_extensions, physical_physical_device_properities, 
             [] (const auto& property) {
                 return property.extensionName;
@@ -152,20 +158,20 @@ namespace vpt {
             .setQueueCreateInfos(device_queue_create_info)
             .setPpEnabledExtensionNames(required_device_extensions.data());
 
-        vk_device = std::make_unique<vk::raii::Device>(*vk_physical_device, device_info);
-        vk_graphics_queue = std::make_unique<vk::raii::Queue>(vk_device.get()->getQueue(graphics_index, 0));
+        vk_device_ctx.device = std::make_unique<vk::raii::Device>(*vk_device_ctx.physical_device, device_info);
+        vk_graphics_queue = std::make_unique<vk::raii::Queue>(vk_device_ctx.device.get()->getQueue(graphics_index, 0));
 
         vk::CommandPoolCreateInfo command_pool_info;
         command_pool_info.setFlags(vk::CommandPoolCreateFlagBits::eResetCommandBuffer) // ???
             .setQueueFamilyIndex(graphics_index);
 
-        vk_command_pool = std::make_unique<vk::raii::CommandPool>(vk_device->createCommandPool(command_pool_info));
+        vk_command_pool = std::make_unique<vk::raii::CommandPool>(vk_device_ctx.device->createCommandPool(command_pool_info));
 
         vk::CommandBufferAllocateInfo command_buffer_alloc_info; // Create command buffers for the device
         command_buffer_alloc_info.setCommandPool(**vk_command_pool);
         command_buffer_alloc_info.setCommandBufferCount(1); // Create a single buffer for now
         
-        vk_command_buffers = std::make_unique<vk::raii::CommandBuffers>(*vk_device, command_buffer_alloc_info);
+        vk_command_buffers = std::make_unique<vk::raii::CommandBuffers>(*vk_device_ctx.device, command_buffer_alloc_info);
     }
 
     void engine::start() {

@@ -15,6 +15,9 @@ add_executable(Vulkan_Pathtracer
     src/vk_util.h
     src/vk_instance.h
     src/vk_validation_logger.h
+    src/vk_swapchain.h
+    src/vk_swapchain.h
+    src/vk_swapchain.cpp
 )
 
 target_link_libraries(Vulkan_Pathtracer PRIVATE
