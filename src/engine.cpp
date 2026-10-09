@@ -32,6 +32,8 @@ namespace vpt {
 
         this->init_vulkan_physical_devices();
         this->init_vulkan_device();
+        this->init_vulkan_swapchain();
+        this->init_vulkan_sync(); // Create the frames for the swapchain
     }
 
     void engine::init_glfw() {
@@ -141,7 +143,7 @@ namespace vpt {
         device_queue_create_info.queueFamilyIndex = vk_graphics_queue_family_index;
         device_queue_create_info.pQueuePriorities = &queue_priority;
 
-        // Device Features
+               // Device Features
         const auto available_physical_device_features = vk_device_ctx.physical_device->getFeatures2();
         const auto physical_physical_device_properities = vk_device_ctx.physical_device->enumerateDeviceExtensionProperties();
         const auto unsupported_physical_device_properities = vk_util::find_unsupported(required_device_extensions, physical_physical_device_properities, 
@@ -166,10 +168,14 @@ namespace vpt {
         vk::DeviceCreateInfo device_info;
         device_info.setPNext(&device_features)
             .setQueueCreateInfos(device_queue_create_info)
-            .setPpEnabledExtensionNames(required_device_extensions.data());
+            .setPEnabledExtensionNames(required_device_extensions);
 
         vk_device_ctx.device = std::make_unique<vk::raii::Device>(*vk_device_ctx.physical_device, device_info);
         // vk_graphics_queue = std::make_unique<vk::raii::Queue>(vk_device_ctx.device.get()->getQueue(graphics_index, 0));
+
+         // Create a graphics queue
+        const uint32_t graphics_queue_index = 0;
+        vk_graphics_queue = std::make_unique<vk::raii::Queue>(*vk_device_ctx.device, vk_graphics_queue_family_index, graphics_queue_index);
 
         vk::CommandPoolCreateInfo command_pool_info;
         command_pool_info.setFlags(vk::CommandPoolCreateFlagBits::eResetCommandBuffer) // ???
@@ -179,7 +185,7 @@ namespace vpt {
 
         vk::CommandBufferAllocateInfo command_buffer_alloc_info; // Create command buffers for the device
         command_buffer_alloc_info.setCommandPool(**vk_command_pool);
-        command_buffer_alloc_info.setCommandBufferCount(1); // Create a single buffer for now
+        command_buffer_alloc_info.setCommandBufferCount(BUFFER_FRAME_COUNT); // Create a single buffer for now
         
         vk_command_buffers = std::make_unique<vk::raii::CommandBuffers>(*vk_device_ctx.device, command_buffer_alloc_info);
     }
@@ -195,19 +201,110 @@ namespace vpt {
         );
     }
 
+    void engine::init_vulkan_sync() {
+        const auto &device = *vk_device_ctx.device;
+        frame_data.reserve(BUFFER_FRAME_COUNT);
+        for (auto i = 0; i < BUFFER_FRAME_COUNT; ++i) {
+            frame_data.push_back(FrameData{
+                vk::raii::Semaphore(device, vk::SemaphoreCreateInfo{}),
+                vk::raii::Fence(device, vk::FenceCreateInfo{
+                    vk::FenceCreateFlagBits::eSignaled // Make it a signed fence
+                })
+            });
+        }
+        for (size_t i = 0; i < vk_swapchain->images().size(); ++i)
+            vk_render_finished.emplace_back(device, vk::SemaphoreCreateInfo{});
+    }
+
+    void engine::draw_frame() {
+        const auto &device = *vk_device_ctx.device;
+        auto &frame = frame_data[current_frame];
+
+        if (device.waitForFences(*frame.frames_in_flight, vk::True, UINT64_MAX) != vk::Result::eSuccess)
+            throw std::runtime_error("Failed waiting for frame fence");
+
+        uint32_t image_index = 0;
+        try {
+            const auto [result, index] = vk_swapchain->handle().acquireNextImage(UINT64_MAX, *frame.available_images);
+            image_index = index;
+        } catch (const vk::OutOfDateKHRError &) {
+            return;
+        }
+
+        device.resetFences(*frame.frames_in_flight);
+
+        const auto &cmd = (*vk_command_buffers)[current_frame];
+        const vk::Image image = vk_swapchain->images()[image_index];
+
+        cmd.reset();
+        cmd.begin(vk::CommandBufferBeginInfo{vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+
+        vk_util::transition_image(cmd, image,
+            vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
+            vk::PipelineStageFlagBits2::eAllTransfer, vk::AccessFlagBits2::eNone,
+            vk::PipelineStageFlagBits2::eAllTransfer, vk::AccessFlagBits2::eTransferWrite);
+
+        const vk::ImageSubresourceRange range{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+        const vk::ClearColorValue clear_color{std::array{0.1f, 0.2f, 0.4f, 1.0f}};
+        cmd.clearColorImage(image, vk::ImageLayout::eTransferDstOptimal, clear_color, range);
+
+        vk_util::transition_image(cmd, image,
+            vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::ePresentSrcKHR,
+            vk::PipelineStageFlagBits2::eAllTransfer, vk::AccessFlagBits2::eTransferWrite,
+            vk::PipelineStageFlagBits2::eNone, vk::AccessFlagBits2::eNone);
+
+        cmd.end();
+
+        const vk::SemaphoreSubmitInfo wait_info{*frame.available_images, 0, vk::PipelineStageFlagBits2::eAllTransfer};
+        const vk::CommandBufferSubmitInfo cmd_info{*cmd};
+        const vk::SemaphoreSubmitInfo signal_info{*vk_render_finished[image_index], 0, vk::PipelineStageFlagBits2::eAllCommands};
+
+        vk::SubmitInfo2 submit{};
+        submit.setWaitSemaphoreInfos(wait_info);
+        submit.setCommandBufferInfos(cmd_info);
+        submit.setSignalSemaphoreInfos(signal_info);
+        vk_graphics_queue->submit2(submit, *frame.frames_in_flight);
+
+        const vk::Semaphore wait_semaphore = *vk_render_finished[image_index];
+        const vk::SwapchainKHR swapchain_handle = *vk_swapchain->handle();
+
+        vk::PresentInfoKHR present_info{};
+        present_info.setWaitSemaphores(wait_semaphore);
+        present_info.setSwapchains(swapchain_handle);
+        present_info.setImageIndices(image_index);
+
+        try {
+            const auto result = vk_graphics_queue->presentKHR(present_info);
+        } catch (const vk::OutOfDateKHRError &) {}
+
+        current_frame = (current_frame + 1) % BUFFER_FRAME_COUNT;
+    }
+
     void engine::start() {
         auto end_time = std::chrono::high_resolution_clock::now();
+
+        vk::FenceCreateInfo fence_info;
+
+        uint32_t fps_counter;
+        double fps_timer = 0;
         while (!glfwWindowShouldClose(window)) {
             auto start_time = std::chrono::high_resolution_clock::now();
-            double deltatime = std::chrono::duration<double>(end_time - start_time).count();
+            double deltatime = std::chrono::duration<double>(start_time - end_time).count();
             end_time = std::chrono::high_resolution_clock::now();
 
             glfwPollEvents();
+            this->draw_frame();
         }
+        vk_device_ctx.device->waitIdle();
     }
 
     engine::~engine() {
-      
+        if (vk_device_ctx.device) vk_device_ctx.device->waitIdle();
+        frame_data.clear();
+        vk_render_finished.clear();
+        vk_swapchain.reset();
+        vk_surface = nullptr;
+        glfwDestroyWindow(window);
         glfwTerminate();
     }
 };

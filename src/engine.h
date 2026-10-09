@@ -69,17 +69,30 @@ namespace vpt {
             return vk::raii::SurfaceKHR(instance, surface);
         }
         void init_vulkan_swapchain();
+        void init_vulkan_sync();
 
         vk::raii::Context vk_context;
         std::unique_ptr<vk::raii::Instance> vk_instance              = nullptr;
         vk::raii::DebugUtilsMessengerEXT vk_debug                    = nullptr;
         vulkan::DeviceContext vk_device_ctx{};
         uint32_t vk_graphics_queue_family_index                      = UINT32_MAX;
+        std::unique_ptr<vk::raii::Queue> vk_graphics_queue           = nullptr;
         std::unique_ptr<vk::raii::CommandPool> vk_command_pool       = nullptr;
         std::unique_ptr<vk::raii::CommandBuffers> vk_command_buffers = nullptr;
 
         vk::raii::SurfaceKHR vk_surface                              = nullptr;
         std::unique_ptr<vulkan::swapchain> vk_swapchain              = nullptr;
+
+        static constexpr uint8_t BUFFER_FRAME_COUNT = 2;
+        struct FrameData {
+            vk::raii::Semaphore available_images;
+            vk::raii::Fence frames_in_flight;
+        };
+        std::vector<FrameData> frame_data;
+
+        void draw_frame();
+        std::vector<vk::raii::Semaphore> vk_render_finished;
+        uint32_t current_frame = 0;
     };
 };
 
