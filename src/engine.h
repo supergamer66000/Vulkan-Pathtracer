@@ -1,10 +1,12 @@
 #ifndef VULKAN_PATHTRACER_ENGINE_H
 #define VULKAN_PATHTRACER_ENGINE_H
 
+#include "vk_allocator.h"
 #include "vk_swapchain.h"
 #include "vulkan/vulkan.hpp"
 #include <cstdint>
 #include <memory>
+#include <optional>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
@@ -12,6 +14,7 @@
 #include <vulkan/vulkan_raii.hpp>
 
 #include "context.h"
+#include "vk_allocator.h"
 
 namespace vpt {
     class engine {
@@ -28,20 +31,7 @@ namespace vpt {
             uint32_t extension_count;
             const char** extensions = nullptr;
         };
-        GLFWExtensionSupportedInfo get_glfw_extensions() {
-            uint32_t glfw_extension_count = 0;
-            auto glfw_ext = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
-
-            auto ext_prop = vk_context.enumerateInstanceExtensionProperties();
-        
-            for (uint32_t i = 0; i < glfw_extension_count; ++i) {
-                if (std::ranges::none_of(ext_prop, [glfwExtension = glfw_ext[i]](auto const& extensionProperty) {
-                    return strcmp(extensionProperty.extensionName, glfwExtension) == 0;
-                }))
-                    throw std::runtime_error("Required GLFW extension not supported: " + std::string(glfw_ext[i]));
-            }
-            return {glfw_extension_count, glfw_ext};
-        }
+        GLFWExtensionSupportedInfo get_glfw_extensions();
         const char* WINDOW_NAME = "Vulkan Pathtracer";
         GLFWwindow* window;
         uint16_t width, height;
@@ -93,6 +83,7 @@ namespace vpt {
         void draw_frame();
         std::vector<vk::raii::Semaphore> vk_render_finished;
         uint32_t current_frame = 0;
+        std::unique_ptr<vulkan::allocator> vk_allocator = nullptr;
     };
 };
 

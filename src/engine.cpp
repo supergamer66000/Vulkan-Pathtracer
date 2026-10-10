@@ -32,6 +32,7 @@ namespace vpt {
 
         this->init_vulkan_physical_devices();
         this->init_vulkan_device();
+        vk_allocator = std::make_unique<vulkan::allocator>(*vk_instance, vk_device_ctx);
         this->init_vulkan_swapchain();
         this->init_vulkan_sync(); // Create the frames for the swapchain
     }
@@ -45,6 +46,21 @@ namespace vpt {
         if (!window)
             throw std::runtime_error("Error creating glfw window");
         glfwMakeContextCurrent(window);
+    }
+
+     engine::GLFWExtensionSupportedInfo engine::get_glfw_extensions() {
+        uint32_t glfw_extension_count = 0;
+        auto glfw_ext = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
+
+        auto ext_prop = vk_context.enumerateInstanceExtensionProperties();
+    
+        for (uint32_t i = 0; i < glfw_extension_count; ++i) {
+            if (std::ranges::none_of(ext_prop, [glfwExtension = glfw_ext[i]](auto const& extensionProperty) {
+                return strcmp(extensionProperty.extensionName, glfwExtension) == 0;
+            }))
+                throw std::runtime_error("Required GLFW extension not supported: " + std::string(glfw_ext[i]));
+        }
+        return {glfw_extension_count, glfw_ext};
     }
 
     void engine::init_vulkan_instance() {
