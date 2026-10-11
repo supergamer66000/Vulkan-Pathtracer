@@ -19,10 +19,11 @@ add_executable(Vulkan_Pathtracer
     src/vk_swapchain.cpp
     src/vk_allocator.h
     src/vk_allocator.cpp
+    src/vk_image.h
+    src/vk_image.cpp
 )
 
 target_link_libraries(Vulkan_Pathtracer PRIVATE
-    Vulkan::Vulkan glfw glm
+    Vulkan::Vulkan VulkanMemoryAllocator-Hpp glfw glm
 )
-
 target_include_directories(Vulkan_Pathtracer PRIVATE src)

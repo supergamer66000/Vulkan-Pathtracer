@@ -18,7 +18,8 @@ public:
     allocator(const allocator &) = delete;
     allocator &operator=(const allocator &) = delete;
 
-    [[nodiscard]] VmaAllocator* get() { return &handle; };
+    void create_image(vk::ImageCreateInfo image_create_info, VmaAllocatorCreateInfo allocation_create_info);
+    [[nodiscard]] VmaAllocator get() { return handle; };
 private:
     std::unique_ptr<VmaAllocatorCreateInfo> handle_create_info = {};
     std::unique_ptr<VmaVulkanFunctions>     handle_functions   = {};

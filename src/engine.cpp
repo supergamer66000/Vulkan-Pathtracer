@@ -1,5 +1,7 @@
 #include "engine.h"
 #include "GLFW/glfw3.h"
+#include "vk_mem_alloc_handles.hpp"
+#include "vk_mem_alloc_structs.hpp"
 #include "vk_swapchain.h"
 #include "vk_util.h"
 #include "vk_validation_logger.h"
@@ -21,7 +23,7 @@ namespace vpt {
        // Init GLFW //
         if (!glfwInit())
             throw std::runtime_error("Error initializing glfw");
-       
+
         this->init_glfw();
         this->init_vulkan_instance();
 
@@ -32,9 +34,32 @@ namespace vpt {
 
         this->init_vulkan_physical_devices();
         this->init_vulkan_device();
-        vk_allocator = std::make_unique<vulkan::allocator>(*vk_instance, vk_device_ctx);
         this->init_vulkan_swapchain();
         this->init_vulkan_sync(); // Create the frames for the swapchain
+
+        // Create a vulkan image
+        // vk::ImageCreateInfo image_info{};
+        // image_info.imageType     = vk::ImageType::e2D;
+        // image_info.format        = vk::Format::eR32G32B32A32Sfloat;
+        // image_info.extent        = vk::Extent3D{vk_swapchain->extent().width, vk_swapchain->extent().height, 1};
+        // image_info.mipLevels     = 1;
+        // image_info.arrayLayers   = 1;
+        // image_info.samples       = vk::SampleCountFlagBits::e1;
+        // image_info.tiling        = vk::ImageTiling::eOptimal;
+        // image_info.usage         = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc;
+        // image_info.sharingMode   = vk::SharingMode::eExclusive;
+        // image_info.initialLayout = vk::ImageLayout::eUndefined;
+        //
+        // vk_image = std::make_unique<vulkan::image>(vk_allocator->get(), image_info);
+        //
+        // // Create Image View info
+        // vk::ImageViewCreateInfo view_info{};
+        // view_info.image = vk_image->handle();
+        // view_info.viewType         = vk::ImageViewType::e2D;
+        // view_info.format           = vk_image->format();
+        // view_info.subresourceRange = vk::ImageSubresourceRange{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+        //
+        // vk_image_view = std::make_unique<vk::raii::ImageView>(*vk_device_ctx.device, view_info);
     }
 
     void engine::init_glfw() {
@@ -160,15 +185,7 @@ namespace vpt {
         device_queue_create_info.pQueuePriorities = &queue_priority;
 
                // Device Features
-        const auto available_physical_device_features = vk_device_ctx.physical_device->getFeatures2();
-        const auto physical_physical_device_properities = vk_device_ctx.physical_device->enumerateDeviceExtensionProperties();
-        const auto unsupported_physical_device_properities = vk_util::find_unsupported(required_device_extensions, physical_physical_device_properities, 
-            [] (const auto& property) {
-                return property.extensionName;
-            });
-        if (unsupported_physical_device_properities != required_device_extensions.end())
-            throw std::runtime_error("Required layers not supported: " + std::string(*unsupported_physical_device_properities));
-
+        const auto available_physical_device_features = vk_device_ctx.physical_device->getFeatures2(); const auto physical_physical_device_properities = vk_device_ctx.physical_device->enumerateDeviceExtensionProperties(); const auto unsupported_physical_device_properities = vk_util::find_unsupported(required_device_extensions, physical_physical_device_properities, [] (const auto& property) { return property.extensionName; }); if (unsupported_physical_device_properities != required_device_extensions.end()) throw std::runtime_error("Required layers not supported: " + std::string(*unsupported_physical_device_properities));
         // Enable device features
         vk::StructureChain<
             vk::PhysicalDeviceFeatures2,
@@ -177,9 +194,9 @@ namespace vpt {
             // vk::PhysicalDeviceVulkan14Features
         > device_features{};
         device_features.get<vk::PhysicalDeviceVulkan12Features>().bufferDeviceAddress = true;
-        device_features.get<vk::PhysicalDeviceVulkan12Features>().descriptorIndexing = true;
-        device_features.get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering = true;
-        device_features.get<vk::PhysicalDeviceVulkan13Features>().synchronization2 = true;
+        device_features.get<vk::PhysicalDeviceVulkan12Features>().descriptorIndexing  = true;
+        device_features.get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering    = true;
+        device_features.get<vk::PhysicalDeviceVulkan13Features>().synchronization2    = true;
 
         vk::DeviceCreateInfo device_info;
         device_info.setPNext(&device_features)
@@ -204,6 +221,29 @@ namespace vpt {
         command_buffer_alloc_info.setCommandBufferCount(BUFFER_FRAME_COUNT); // Create a single buffer for now
         
         vk_command_buffers = std::make_unique<vk::raii::CommandBuffers>(*vk_device_ctx.device, command_buffer_alloc_info);
+    }
+
+    void engine::init_allocator() {
+        vma::AllocatorCreateInfo info{};
+        info.vulkanApiVersion = vk::ApiVersion14;
+        info.instance = *vk_instance;
+        info.physicalDevice = **vk_device_ctx.physical_device;
+        info.device = **vk_device_ctx.device;
+
+        vma::VulkanFunctions functions{};
+        functions.vkGetInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(
+            *vk_instance->getProcAddr("vkGetInstanceProcAddr"));
+        functions.vkGetDeviceProcAddr = reinterpret_cast<PFN_vkGetDeviceProcAddr>(
+            **vk_device_ctx.device->getProcAddr("vkGetDeviceProcAddr"));
+
+        if (!functions.vkGetInstanceProcAddr)
+            throw std::runtime_error("VMA: vkGetInstanceProcAddr is null");
+        if (!functions.vkGetDeviceProcAddr)
+            throw std::runtime_error("VMA: vkGetDeviceProcAddr is null");
+
+        info.pVulkanFunctions = &functions; // TODO fix becomes a null reference
+
+        vk_allocator = std::make_unique<vma::UniqueAllocator>(vma::createAllocatorUnique(info));
     }
 
     void engine::init_vulkan_swapchain() {

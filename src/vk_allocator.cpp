@@ -37,6 +37,8 @@ namespace vpt::vulkan {
             throw std::runtime_error("Failed to create the VMA allocator");
     }
 
+    
+
     allocator::~allocator() {
         if (handle) vmaDestroyAllocator(handle);
     }
