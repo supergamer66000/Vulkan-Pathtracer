@@ -1,24 +1,24 @@
 #ifndef VULKAN_PATHTRACER_ENGINE_H
 #define VULKAN_PATHTRACER_ENGINE_H
 
-#include "vk_image.h"
-
-#define VMA_IMPLEMENTATION
-#define VMA_STATIC_VULKAN_FUNCTIONS 0
-#define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
-#include <vk_mem_alloc.hpp>
-
-#include "vk_swapchain.h"
-#include "vulkan/vulkan.hpp"
 #include <cstdint>
 #include <memory>
 #include <optional>
+
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
 #include <vulkan/vulkan_raii.hpp>
 
+#include <vma/vk_mem_alloc.h>
+#define VMA_IMPLEMENTATION
+#define VMA_STATIC_VULKAN_FUNCTIONS 0
+#define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
+#include <vk_mem_alloc_raii.hpp>
+
 #include "context.h"
+#include "vk_swapchain.h"
+#include "vulkan/vulkan.hpp"
 
 namespace vpt {
 
@@ -86,20 +86,11 @@ private:
     };
     std::vector<FrameData> frame_data;
 
-    union Allocator {
-        vma::UniqueAllocator allocator;
-        vma::VulkanFunctions pAFunctions;
-    };
-    using vpt_allocator = Allocator;
-    vpt_allocator vk_allocator;
+    vma::raii::Allocator vk_allocator = nullptr;
 
     void draw_frame();
     std::vector<vk::raii::Semaphore> vk_render_finished;
     uint32_t current_frame = 0;
-
-    // Vulkan Image
-    std::unique_ptr<vulkan::image> vk_image            = nullptr;
-    std::unique_ptr<vk::raii::ImageView> vk_image_view = nullptr;
 };
 
 };

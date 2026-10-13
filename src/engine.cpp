@@ -1,6 +1,7 @@
 #include "engine.h"
 #include "GLFW/glfw3.h"
 #include "vk_mem_alloc_handles.hpp"
+#include "vk_mem_alloc_raii.hpp"
 #include "vk_mem_alloc_structs.hpp"
 #include "vk_swapchain.h"
 #include "vk_util.h"
@@ -18,7 +19,7 @@
 
 namespace vpt {
     engine::engine() : 
-        width(1280), height(720)
+        width(1920), height(1080)
     {
        // Init GLFW //
         if (!glfwInit())
@@ -34,32 +35,9 @@ namespace vpt {
 
         this->init_vulkan_physical_devices();
         this->init_vulkan_device();
+        this->init_allocator();
         this->init_vulkan_swapchain();
         this->init_vulkan_sync(); // Create the frames for the swapchain
-
-        // Create a vulkan image
-        // vk::ImageCreateInfo image_info{};
-        // image_info.imageType     = vk::ImageType::e2D;
-        // image_info.format        = vk::Format::eR32G32B32A32Sfloat;
-        // image_info.extent        = vk::Extent3D{vk_swapchain->extent().width, vk_swapchain->extent().height, 1};
-        // image_info.mipLevels     = 1;
-        // image_info.arrayLayers   = 1;
-        // image_info.samples       = vk::SampleCountFlagBits::e1;
-        // image_info.tiling        = vk::ImageTiling::eOptimal;
-        // image_info.usage         = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc;
-        // image_info.sharingMode   = vk::SharingMode::eExclusive;
-        // image_info.initialLayout = vk::ImageLayout::eUndefined;
-        //
-        // vk_image = std::make_unique<vulkan::image>(vk_allocator->get(), image_info);
-        //
-        // // Create Image View info
-        // vk::ImageViewCreateInfo view_info{};
-        // view_info.image = vk_image->handle();
-        // view_info.viewType         = vk::ImageViewType::e2D;
-        // view_info.format           = vk_image->format();
-        // view_info.subresourceRange = vk::ImageSubresourceRange{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
-        //
-        // vk_image_view = std::make_unique<vk::raii::ImageView>(*vk_device_ctx.device, view_info);
     }
 
     void engine::init_glfw() {
@@ -224,26 +202,12 @@ namespace vpt {
     }
 
     void engine::init_allocator() {
+        vma::VulkanFunctions funcs = vma::functionsFromDispatcher(VULKAN_HPP_DEFAULT_DISPATCHER);
+
         vma::AllocatorCreateInfo info{};
-        info.vulkanApiVersion = vk::ApiVersion14;
-        info.instance = *vk_instance;
-        info.physicalDevice = **vk_device_ctx.physical_device;
-        info.device = **vk_device_ctx.device;
+        info.physicalDevice = *vk_device_ctx.physical_device;
 
-        vma::VulkanFunctions functions{};
-        functions.vkGetInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(
-            *vk_instance->getProcAddr("vkGetInstanceProcAddr"));
-        functions.vkGetDeviceProcAddr = reinterpret_cast<PFN_vkGetDeviceProcAddr>(
-            **vk_device_ctx.device->getProcAddr("vkGetDeviceProcAddr"));
-
-        if (!functions.vkGetInstanceProcAddr)
-            throw std::runtime_error("VMA: vkGetInstanceProcAddr is null");
-        if (!functions.vkGetDeviceProcAddr)
-            throw std::runtime_error("VMA: vkGetDeviceProcAddr is null");
-
-        info.pVulkanFunctions = &functions; // TODO fix becomes a null reference
-
-        vk_allocator = std::make_unique<vma::UniqueAllocator>(vma::createAllocatorUnique(info));
+        vk_allocator = vma::raii::createAllocator(*vk_instance, *vk_device_ctx.device, info);
     }
 
     void engine::init_vulkan_swapchain() {
