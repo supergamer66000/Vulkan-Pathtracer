@@ -2,15 +2,51 @@
 #define VULKAN_PATHTRACER_VK_UTIL_H
 
 #include "GLFW/glfw3.h"
+#include "vulkan/vulkan.hpp"
 #include <vector>
 #include <algorithm>
 #include <cstring>
 
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_raii.hpp>
-#include <iostream>
+#include <vk_mem_alloc_raii.hpp>
 
 namespace vpt::vk_util {
+
+    namespace image {
+        inline vk::ImageCreateInfo make_info(vk::Extent2D size, vk::Format format) {
+            vk::ImageCreateInfo info{};
+            info.imageType = vk::ImageType::e2D;
+            info.format = format;
+            info.extent = vk::Extent3D{size.width, size.height, 1};
+            info.mipLevels = 1;
+            info.arrayLayers = 1;
+            info.samples = vk::SampleCountFlagBits::e1;
+            info.tiling = vk::ImageTiling::eOptimal;
+            info.usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc;
+            info.sharingMode = vk::SharingMode::eExclusive;
+            info.initialLayout = vk::ImageLayout::eUndefined;
+            return info;
+        }
+
+        inline vk::ImageViewCreateInfo make_view_info(vk::Image image, vk::Format format) {
+            vk::ImageViewCreateInfo info{};
+            info.image = image;
+            info.viewType = vk::ImageViewType::e2D;
+            info.format = format;
+            info.subresourceRange = vk::ImageSubresourceRange{
+                vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1
+            };
+            return info;
+        }
+
+        inline vma::AllocationCreateInfo make_allocation_info() {
+            vma::AllocationCreateInfo info{};
+            info.usage = vma::MemoryUsage::eAutoPreferDevice;
+            info.flags = vma::AllocationCreateFlagBits::eDedicatedMemory;
+            return info;
+        }
+    }
 
     template <typename RequiredRange, typename PropertyRange, typename NameGetter>
     inline auto find_unsupported(

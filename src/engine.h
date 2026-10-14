@@ -8,7 +8,6 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#include <vulkan/vulkan_raii.hpp>
 
 #include <vma/vk_mem_alloc.h>
 #define VMA_IMPLEMENTATION
@@ -20,7 +19,15 @@
 #include "vk_swapchain.h"
 #include "vulkan/vulkan.hpp"
 
+#include "vk_compute.h"
+#include "vk_descriptors.h"
+
 namespace vpt {
+
+struct FrameData {
+    int frame;
+};
+using gradient_pipeline = vulkan::compute_pipeline<FrameData, 8, 8>;
 
 class engine {
 public:
@@ -76,6 +83,8 @@ private:
     std::unique_ptr<vk::raii::CommandPool> vk_command_pool       = nullptr;
     std::unique_ptr<vk::raii::CommandBuffers> vk_command_buffers = nullptr;
 
+
+
     vk::raii::SurfaceKHR vk_surface                              = nullptr;
     std::unique_ptr<vulkan::swapchain> vk_swapchain              = nullptr;
 
@@ -87,6 +96,8 @@ private:
     std::vector<FrameData> frame_data;
 
     vma::raii::Allocator vk_allocator = nullptr;
+    void init_compute();
+    std::unique_ptr<gradient_pipeline> vk_compute = nullptr;
 
     void draw_frame();
     std::vector<vk::raii::Semaphore> vk_render_finished;
