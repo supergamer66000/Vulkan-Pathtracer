@@ -16,8 +16,12 @@ public:
     using layout_t = set_layout<binding<0, vk::DescriptorType::eStorageImage, compute_stage>>;
     static constexpr auto format = vk::Format::eR32G32B32A32Sfloat;
 
-    compute_target(const vk::raii::Device &device, vma::raii::Allocator allocator, vk::Extent2D extent) :
-        extent(extent), image(allocator.createImage(vk_util::image::make_info(extent, format), vk_util::image::make_allocation_info())),
+    /*
+     * Allocates a image and a image view to the GPU for use on a compute shader
+     */
+    compute_target(const vk::raii::Device &device, const vma::raii::Allocator &allocator, vk::Extent2D extent) :
+        extent(extent),
+        image(allocator.createImage(vk_util::image::make_info(extent, format), vk_util::image::make_allocation_info())),
         image_view(device, vk_util::image::make_view_info(*image, format)), layout(device), descriptor_set(device, layout) {}
 
     [[nodiscard]] vk::Extent2D get_extent() { return extent; }

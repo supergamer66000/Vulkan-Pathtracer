@@ -18,6 +18,12 @@
 #include <stdexcept>
 #include <vector>
 
+namespace {
+    const uint32_t spv_binary[] =
+    #include "gradient.h"
+    ;
+}
+
 namespace vpt {
     engine::engine() :
         width(1920), height(1080)
@@ -143,65 +149,72 @@ namespace vpt {
         std::cout << "Selected GPU: " << physical_device_properties.properties.deviceName << std::endl;
     }
 
-    void engine::init_vulkan_device() {
-        const auto graphics_family_queue_properties = vk_device_ctx.physical_device->getQueueFamilyProperties2();
-        std::optional<uint32_t> found_family;
-        for (uint32_t i = 0; i < graphics_family_queue_properties.size(); ++i) {
-            const bool graphics = static_cast<bool>(
-                graphics_family_queue_properties[i].queueFamilyProperties.queueFlags & vk::QueueFlagBits::eGraphics);
-            if (graphics && vk_device_ctx.physical_device->getSurfaceSupportKHR(i, *vk_surface)) {
-                found_family = i;
-                break;
-            }
-        }
-        if (!found_family) throw std::runtime_error("Failed to find graphics family for device");
-        vk_graphics_queue_family_index = *found_family;
-
-        // Create the device Queue
-        constexpr float queue_priority = 0.5f;
-        vk::DeviceQueueCreateInfo device_queue_create_info;
-        device_queue_create_info.queueCount = 1;
-        device_queue_create_info.queueFamilyIndex = vk_graphics_queue_family_index;
-        device_queue_create_info.pQueuePriorities = &queue_priority;
-
-               // Device Features
-        const auto available_physical_device_features = vk_device_ctx.physical_device->getFeatures2(); const auto physical_physical_device_properities = vk_device_ctx.physical_device->enumerateDeviceExtensionProperties(); const auto unsupported_physical_device_properities = vk_util::find_unsupported(required_device_extensions, physical_physical_device_properities, [] (const auto& property) { return property.extensionName; }); if (unsupported_physical_device_properities != required_device_extensions.end()) throw std::runtime_error("Required layers not supported: " + std::string(*unsupported_physical_device_properities));
-        // Enable device features
-        vk::StructureChain<
-            vk::PhysicalDeviceFeatures2,
-            vk::PhysicalDeviceVulkan12Features,
-            vk::PhysicalDeviceVulkan13Features
-            // vk::PhysicalDeviceVulkan14Features
-        > device_features{};
-        device_features.get<vk::PhysicalDeviceVulkan12Features>().bufferDeviceAddress = true;
-        device_features.get<vk::PhysicalDeviceVulkan12Features>().descriptorIndexing  = true;
-        device_features.get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering    = true;
-        device_features.get<vk::PhysicalDeviceVulkan13Features>().synchronization2    = true;
-
-        vk::DeviceCreateInfo device_info;
-        device_info.setPNext(&device_features)
-            .setQueueCreateInfos(device_queue_create_info)
-            .setPEnabledExtensionNames(required_device_extensions);
-
-        vk_device_ctx.device = std::make_unique<vk::raii::Device>(*vk_device_ctx.physical_device, device_info);
-        // vk_graphics_queue = std::make_unique<vk::raii::Queue>(vk_device_ctx.device.get()->getQueue(graphics_index, 0));
-
-         // Create a graphics queue
-        const uint32_t graphics_queue_index = 0;
-        vk_graphics_queue = std::make_unique<vk::raii::Queue>(*vk_device_ctx.device, vk_graphics_queue_family_index, graphics_queue_index);
-
-        vk::CommandPoolCreateInfo command_pool_info;
-        command_pool_info.setFlags(vk::CommandPoolCreateFlagBits::eResetCommandBuffer) // ???
-            .setQueueFamilyIndex(vk_graphics_queue_family_index);
-
-        vk_command_pool = std::make_unique<vk::raii::CommandPool>(vk_device_ctx.device->createCommandPool(command_pool_info));
-
-        vk::CommandBufferAllocateInfo command_buffer_alloc_info; // Create command buffers for the device
-        command_buffer_alloc_info.setCommandPool(**vk_command_pool);
-        command_buffer_alloc_info.setCommandBufferCount(BUFFER_FRAME_COUNT); // Create a single buffer for now
-        
-        vk_command_buffers = std::make_unique<vk::raii::CommandBuffers>(*vk_device_ctx.device, command_buffer_alloc_info);
-    }
+    // void engine::init_vulkan_device() {
+    //     // const auto graphics_family_queue_properties = vk_device_ctx.physical_device->getQueueFamilyProperties2();
+    //     // std::optional<uint32_t> found_family;
+    //     // for (uint32_t i = 0; i < graphics_family_queue_properties.size(); ++i) {
+    //     //     const bool graphics = static_cast<bool>(
+    //     //         graphics_family_queue_properties[i].queueFamilyProperties.queueFlags & vk::QueueFlagBits::eGraphics);
+    //     //     if (graphics && vk_device_ctx.physical_device->getSurfaceSupportKHR(i, *vk_surface)) {
+    //     //         found_family = i;
+    //     //         break;
+    //     //     }
+    //     // }
+    //     // if (!found_family) throw std::runtime_error("Failed to find graphics family for device");
+    //     // vk_graphics_queue_family_index = *found_family;
+    //     //
+    //     // // Create the device Queue
+    //     // constexpr float queue_priority = 0.5f;
+    //     // vk::DeviceQueueCreateInfo device_queue_create_info;
+    //     // device_queue_create_info.queueCount = 1;
+    //     // device_queue_create_info.queueFamilyIndex = vk_graphics_queue_family_index;
+    //     // device_queue_create_info.pQueuePriorities = &queue_priority;
+    //
+    //            // Device Features
+    //     const auto available_physical_device_features = vk_device_ctx.physical_device->getFeatures2();
+    //     const auto physical_physical_device_properities = vk_device_ctx.physical_device->enumerateDeviceExtensionProperties();
+    //     const auto unsupported_physical_device_properities = vk_util::find_unsupported(required_device_extensions, physical_physical_device_properities, 
+    //         [] (const auto& property) { return property.extensionName; });
+    //     if (unsupported_physical_device_properities != required_device_extensions.end())
+    //         throw std::runtime_error("Required layers not supported: " + std::string(*unsupported_physical_device_properities));
+    //
+    //     // Enable device features
+    //     vk::StructureChain<
+    //         vk::PhysicalDeviceFeatures2,
+    //         vk::PhysicalDeviceVulkan12Features,
+    //         vk::PhysicalDeviceVulkan13Features,
+    //         vk::PhysicalDeviceVulkan14Features
+    //     > device_features{};
+    //     device_features.get<vk::PhysicalDeviceVulkan12Features>().bufferDeviceAddress = true;
+    //     device_features.get<vk::PhysicalDeviceVulkan12Features>().descriptorIndexing  = true;
+    //     device_features.get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering    = true;
+    //     device_features.get<vk::PhysicalDeviceVulkan13Features>().synchronization2    = true;
+    //     device_features.get<vk::PhysicalDeviceVulkan14Features>().maintenance5        = true;
+    //
+    //     vk::DeviceCreateInfo device_info;
+    //     device_info.setPNext(&device_features)
+    //         .setQueueCreateInfos(device_queue_create_info)
+    //         .setPEnabledExtensionNames(required_device_extensions);
+    //
+    //     vk_device_ctx.device = std::make_unique<vk::raii::Device>(*vk_device_ctx.physical_device, device_info);
+    //     // vk_graphics_queue = std::make_unique<vk::raii::Queue>(vk_device_ctx.device.get()->getQueue(graphics_index, 0));
+    //
+    //      // Create a graphics queue
+    //     const uint32_t graphics_queue_index = 0;
+    //     vk_graphics_queue = std::make_unique<vk::raii::Queue>(*vk_device_ctx.device, vk_graphics_queue_family_index, graphics_queue_index);
+    //
+    //     vk::CommandPoolCreateInfo command_pool_info;
+    //     command_pool_info.setFlags(vk::CommandPoolCreateFlagBits::eResetCommandBuffer) // ???
+    //         .setQueueFamilyIndex(vk_graphics_queue_family_index);
+    //
+    //     vk_command_pool = std::make_unique<vk::raii::CommandPool>(vk_device_ctx.device->createCommandPool(command_pool_info));
+    //
+    //     vk::CommandBufferAllocateInfo command_buffer_alloc_info; // Create command buffers for the device
+    //     command_buffer_alloc_info.setCommandPool(**vk_command_pool);
+    //     command_buffer_alloc_info.setCommandBufferCount(BUFFER_FRAME_COUNT); // Create a single buffer for now
+    //
+    //     vk_command_buffers = std::make_unique<vk::raii::CommandBuffers>(*vk_device_ctx.device, command_buffer_alloc_info);
+    // }
 
     void engine::init_allocator() {
         vma::VulkanFunctions funcs = vma::functionsFromDispatcher(VULKAN_HPP_DEFAULT_DISPATCHER);
@@ -241,136 +254,12 @@ namespace vpt {
     void engine::init_compute() {
         const auto& device = *vk_device_ctx.device;
 
-        const auto shader_binary =
-{0x6474732e,0x3035342e,0x00000000,0x0003000e,
-0x00000000,0x00000001,0x0006000f,0x00000005,
-0x00000004,0x6e69616d,0x00000000,0x0000000d,
-0x00060010,0x00000004,0x00000011,0x00000001,
-0x00000001,0x00000001,0x00030003,0x00000002,
-0x000001c2,0x000a0004,0x475f4c47,0x4c474f4f,
-0x70635f45,0x74735f70,0x5f656c79,0x656e696c,
-0x7269645f,0x69746365,0x00006576,0x00080004,
-0x475f4c47,0x4c474f4f,0x6e695f45,0x64756c63,
-0x69645f65,0x74636572,0x00657669,0x00040005,
-0x00000004,0x6e69616d,0x00000000,0x00040005,
-0x00000009,0x65786970,0x0000006c,0x00080005,
-0x0000000d,0x475f6c67,0x61626f6c,0x766e496c,
-0x7461636f,0x496e6f69,0x00000044,0x00040005,
-0x00000012,0x657a6973,0x00000000,0x00060005,
-0x00000016,0x67726174,0x695f7465,0x6567616d,
-0x00000000,0x00030005,0x00000030,0x00007675,
-0x00040005,0x0000003a,0x736c7570,0x00000065,
-0x00050005,0x0000003b,0x68737570,0x6f6c625f,
-0x00006b63,0x00050006,0x0000003b,0x00000000,
-0x6d617266,0x00000065,0x00040005,0x0000003d,
-0x68737570,0x00000000,0x00040047,0x0000000d,
-0x0000000b,0x0000001c,0x00030047,0x00000016,
-0x00000019,0x00040047,0x00000016,0x00000021,
-0x00000000,0x00040047,0x00000016,0x00000022,
-0x00000000,0x00030047,0x0000003b,0x00000002,
-0x00050048,0x0000003b,0x00000000,0x00000023,
-0x00000000,0x00040047,0x00000051,0x00000001,
-0x00000000,0x00040047,0x00000052,0x00000001,
-0x00000001,0x00040047,0x00000053,0x00000001,
-0x00000002,0x00040047,0x00000054,0x0000000b,
-0x00000019,0x00020013,0x00000002,0x00030021,
-0x00000003,0x00000002,0x00040015,0x00000006,
-0x00000020,0x00000001,0x00040017,0x00000007,
-0x00000006,0x00000002,0x00040020,0x00000008,
-0x00000007,0x00000007,0x00040015,0x0000000a,
-0x00000020,0x00000000,0x00040017,0x0000000b,
-0x0000000a,0x00000003,0x00040020,0x0000000c,
-0x00000001,0x0000000b,0x0004003b,0x0000000c,
-0x0000000d,0x00000001,0x00040017,0x0000000e,
-0x0000000a,0x00000002,0x00030016,0x00000013,
-0x00000020,0x00090019,0x00000014,0x00000013,
-0x00000001,0x00000000,0x00000000,0x00000000,
-0x00000002,0x00000001,0x00040020,0x00000015,
-0x00000000,0x00000014,0x0004003b,0x00000015,
-0x00000016,0x00000000,0x00020014,0x00000019,
-0x0004002b,0x0000000a,0x0000001a,0x00000000,
-0x00040020,0x0000001b,0x00000007,0x00000006,
-0x0004002b,0x0000000a,0x00000024,0x00000001,
-0x00040017,0x0000002e,0x00000013,0x00000002,
-0x00040020,0x0000002f,0x00000007,0x0000002e,
-0x0004002b,0x00000013,0x00000033,0x3f000000,
-0x00040020,0x00000039,0x00000007,0x00000013,
-0x0003001e,0x0000003b,0x0000000a,0x00040020,
-0x0000003c,0x00000009,0x0000003b,0x0004003b,
-0x0000003c,0x0000003d,0x00000009,0x0004002b,
-0x00000006,0x0000003e,0x00000000,0x00040020,
-0x0000003f,0x00000009,0x0000000a,0x0004002b,
-0x00000013,0x00000043,0x3ca3d70a,0x0004002b,
-0x00000013,0x0000004c,0x3f800000,0x00040017,
-0x0000004d,0x00000013,0x00000004,0x00040032,
-0x0000000a,0x00000051,0x00000001,0x00040032,
-0x0000000a,0x00000052,0x00000001,0x00040032,
-0x0000000a,0x00000053,0x00000001,0x00060033,
-0x0000000b,0x00000054,0x00000051,0x00000052,
-0x00000053,0x00050036,0x00000002,0x00000004,
-0x00000000,0x00000003,0x000200f8,0x00000005,
-0x0004003b,0x00000008,0x00000009,0x00000007,
-0x0004003b,0x00000008,0x00000012,0x00000007,
-0x0004003b,0x0000002f,0x00000030,0x00000007,
-0x0004003b,0x00000039,0x0000003a,0x00000007,
-0x0004003d,0x0000000b,0x0000000f,0x0000000d,
-0x0007004f,0x0000000e,0x00000010,0x0000000f,
-0x0000000f,0x00000000,0x00000001,0x0004007c,
-0x00000007,0x00000011,0x00000010,0x0003003e,
-0x00000009,0x00000011,0x0004003d,0x00000014,
-0x00000017,0x00000016,0x00040068,0x00000007,
-0x00000018,0x00000017,0x0003003e,0x00000012,
-0x00000018,0x00050041,0x0000001b,0x0000001c,
-0x00000009,0x0000001a,0x0004003d,0x00000006,
-0x0000001d,0x0000001c,0x00050041,0x0000001b,
-0x0000001e,0x00000012,0x0000001a,0x0004003d,
-0x00000006,0x0000001f,0x0000001e,0x000500af,
-0x00000019,0x00000020,0x0000001d,0x0000001f,
-0x000400a8,0x00000019,0x00000021,0x00000020,
-0x000300f7,0x00000023,0x00000000,0x000400fa,
-0x00000021,0x00000022,0x00000023,0x000200f8,
-0x00000022,0x00050041,0x0000001b,0x00000025,
-0x00000009,0x00000024,0x0004003d,0x00000006,
-0x00000026,0x00000025,0x00050041,0x0000001b,
-0x00000027,0x00000012,0x00000024,0x0004003d,
-0x00000006,0x00000028,0x00000027,0x000500af,
-0x00000019,0x00000029,0x00000026,0x00000028,
-0x000200f9,0x00000023,0x000200f8,0x00000023,
-0x000700f5,0x00000019,0x0000002a,0x00000020,
-0x00000005,0x00000029,0x00000022,0x000300f7,
-0x0000002c,0x00000000,0x000400fa,0x0000002a,
-0x0000002b,0x0000002c,0x000200f8,0x0000002b,
-0x000100fd,0x000200f8,0x0000002c,0x0004003d,
-0x00000007,0x00000031,0x00000009,0x0004006f,
-0x0000002e,0x00000032,0x00000031,0x00050050,
-0x0000002e,0x00000034,0x00000033,0x00000033,
-0x00050081,0x0000002e,0x00000035,0x00000032,
-0x00000034,0x0004003d,0x00000007,0x00000036,
-0x00000012,0x0004006f,0x0000002e,0x00000037,
-0x00000036,0x00050088,0x0000002e,0x00000038,
-0x00000035,0x00000037,0x0003003e,0x00000030,
-0x00000038,0x00050041,0x0000003f,0x00000040,
-0x0000003d,0x0000003e,0x0004003d,0x0000000a,
-0x00000041,0x00000040,0x00040070,0x00000013,
-0x00000042,0x00000041,0x00050085,0x00000013,
-0x00000044,0x00000042,0x00000043,0x0006000c,
-0x00000013,0x00000045,0x00000001,0x0000000d,
-0x00000044,0x00050085,0x00000013,0x00000046,
-0x00000033,0x00000045,0x00050081,0x00000013,
-0x00000047,0x00000033,0x00000046,0x0003003e,
-0x0000003a,0x00000047,0x0004003d,0x00000014,
-0x00000048,0x00000016,0x0004003d,0x00000007,
-0x00000049,0x00000009,0x0004003d,0x0000002e,
-0x0000004a,0x00000030,0x0004003d,0x00000013,
-0x0000004b,0x0000003a,0x00050051,0x00000013,
-0x0000004e,0x0000004a,0x00000000,0x00050051,
-0x00000013,0x0000004f,0x0000004a,0x00000001,
-0x00070050,0x0000004d,0x00000050,0x0000004e,
-0x0000004f,0x0000004b,0x0000004c,0x00040063,
-0x00000048,0x00000049,0x00000050,0x000100fd,
-0x00010038};
+        vk_compute_target = std::make_unique<vulkan::compute_target>(device, vk_allocator, *vk_swapchain->extent());
 
-        // vk_compute = std::make_unique<gradient_pipeline>(device, shader_binary, descriptor_set.handle());
+        const auto& layout_handle = vk_compute_target->get_layout().handle();
+        const auto& desc_set = vk_compute_target->get_descriptor_set();
+
+        vk_compute = std::make_unique<gradient_pipeline>(device, spv_binary, layout_handle);
     }
 
     void engine::draw_frame() {

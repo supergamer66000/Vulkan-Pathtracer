@@ -1,13 +1,13 @@
 #ifndef VULKAN_PATHTRACER_ENGINE_H
 #define VULKAN_PATHTRACER_ENGINE_H
 
+#include "vk_compute_target.h"
 #include <cstdint>
 #include <memory>
 #include <optional>
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
-
 
 #include <vma/vk_mem_alloc.h>
 #define VMA_IMPLEMENTATION
@@ -17,10 +17,7 @@
 
 #include "context.h"
 #include "vk_swapchain.h"
-#include "vulkan/vulkan.hpp"
-
 #include "vk_compute.h"
-#include "vk_descriptors.h"
 
 namespace vpt {
 
@@ -55,7 +52,8 @@ private:
     static const bool use_validation_layers = true;
 
     const std::vector<const char*> required_device_extensions = {
-        vk::KHRSwapchainExtensionName
+        vk::KHRSwapchainExtensionName,
+        vk::KHRSynchronization2ExtensionName
     };
 
     void init_vulkan_instance();
@@ -83,8 +81,6 @@ private:
     std::unique_ptr<vk::raii::CommandPool> vk_command_pool       = nullptr;
     std::unique_ptr<vk::raii::CommandBuffers> vk_command_buffers = nullptr;
 
-
-
     vk::raii::SurfaceKHR vk_surface                              = nullptr;
     std::unique_ptr<vulkan::swapchain> vk_swapchain              = nullptr;
 
@@ -97,6 +93,7 @@ private:
 
     vma::raii::Allocator vk_allocator = nullptr;
     void init_compute();
+    std::unique_ptr<vulkan::compute_target> vk_compute_target = nullptr;
     std::unique_ptr<gradient_pipeline> vk_compute = nullptr;
 
     void draw_frame();

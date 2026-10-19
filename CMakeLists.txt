@@ -22,6 +22,8 @@ add_executable(Vulkan_Pathtracer
     src/vk_compute.h
     src/vulkan.h
     src/vk_compute_target.h
+    src/vk_device.h
+    src/vk_device.cpp
 )
 
 target_link_libraries(Vulkan_Pathtracer PRIVATE
